@@ -1,0 +1,4 @@
+[workspace]
+members = [
+    "porcino_core"
+]
