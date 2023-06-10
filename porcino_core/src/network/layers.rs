@@ -19,12 +19,14 @@ impl FFLayer {
         match weight_init {
             InitializationMethods::Zero => Self {
                 weights: Array2::ones((neurons, inputs)),
-                biases: Array2::zeros((neurons, 1)),
+                biases: Array2::ones((neurons, 1)),
                 zs: Array2::zeros((neurons, 1)),
                 state: Array2::zeros((neurons, 1)),
             },
-            InitializationMethods::PseudoSpread => Self { 
-                weights: Array2::from_shape_fn((neurons, inputs), |(i, j)| (i as f64 + 1.0).exp() * (j as f64 + 1.0).ln()),
+            InitializationMethods::PseudoSpread => Self {
+                weights: Array2::from_shape_fn((neurons, inputs), |(i, j)| {
+                    (i as f64 + 1.0).exp() * (j as f64 + 2.0).ln()
+                }),
                 biases: Array2::zeros((neurons, 1)),
                 zs: Array2::zeros((neurons, 1)),
                 state: Array2::zeros((neurons, 1)),

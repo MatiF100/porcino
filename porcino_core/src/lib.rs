@@ -1,3 +1,4 @@
+pub mod data;
 mod enums;
 mod errors;
 pub mod network;
