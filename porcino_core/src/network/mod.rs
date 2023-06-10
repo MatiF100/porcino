@@ -21,7 +21,7 @@ impl Network {
                     FFLayer::new(
                         window[0],
                         window[1],
-                        crate::enums::InitializationMethods::Zero,
+                        crate::enums::InitializationMethods::PseudoSpread,
                     )
                 })
                 .collect(),
@@ -41,12 +41,12 @@ impl Network {
         eta: f64
     ){
                 // Allocation of gradient vectors
-                let mut nabla_b = self
-                .layers
-                .iter()
-                .map(|layer| &layer.biases)
-                .map(|b| Array2::zeros(b.raw_dim()))
-                .collect::<Vec<Array2<f64>>>();
+        let mut nabla_b = self
+            .layers
+            .iter()
+            .map(|layer| &layer.biases)
+            .map(|b| Array2::zeros(b.raw_dim()))
+            .collect::<Vec<Array2<f64>>>();
         let mut nabla_w = self
             .layers
             .iter()
@@ -58,7 +58,7 @@ impl Network {
             for (x, y) in training_data {
                 // Getting updated gradients from backpropagation algorithm
                 self.process_data(x);
-                let (delta_nabla_b, delta_nabla_w) = self.calculate_gradient( y);
+                let (delta_nabla_b, delta_nabla_w) = self.calculate_gradient( x,y);
     
                 // Calculating new gradients with respect to ones created in first steps and also newly calculated ones
                 nabla_b = nabla_b
@@ -96,6 +96,7 @@ impl Network {
     }
     pub fn calculate_gradient(
         &self,
+        input_set: &Array2<f64>,
         reference_set: &Array2<f64>,
     ) -> (Vec<Array2<f64>>, Vec<Array2<f64>>) {
         let mut nabla_b = self
@@ -111,22 +112,38 @@ impl Network {
             .map(|w| Array2::zeros(w.raw_dim()))
             .collect::<Vec<Array2<f64>>>();
 
-        let mut delta = (&self.layers.last().unwrap().state - reference_set).dot(&Sigmoid::derivative(&self.layers.last().unwrap().zs, None));
+        // Last layer
+        let mut delta = (&self.layers.last().unwrap().state - reference_set)
+            * &Sigmoid::derivative(&self.layers.last().unwrap().zs, None);
 
         *nabla_b.last_mut().unwrap() = delta.clone();
-        *nabla_w.last_mut().unwrap() = delta.dot(&self.layers[self.layers.len() - 2].state.t());
+        *nabla_w.last_mut().unwrap() = if self.layers.len() >= 2{
+            delta.dot(&self.layers[self.layers.len() - 2].state.t())
+        }else{
+            delta.dot(&self.layers[0].zs.t())
+        };
 
-        for (idx, lrs) in self.layers.windows(2).rev().enumerate() {
-            let derivative = Sigmoid::derivative(&lrs[0].zs, None);
-            //delta = lrs[0].weights.t().dot(&delta) * derivative;
-            delta = delta.dot(&lrs[0].weights).t().dot(&derivative);
+        let b_len = nabla_b.len();
+        let w_len = nabla_w.len();
 
-            let b_len = nabla_b.len();
-            let w_len = nabla_w.len();
+        // Middle layers
+        for (idx, lrs) in self.layers.windows(3).rev().enumerate() {
+            let derivative = Sigmoid::derivative(&lrs[1].zs, None);
+            delta = &lrs[2].weights.t().dot(&delta) * &derivative;
 
             nabla_b[b_len - idx - 2] = delta.clone();
-            nabla_w[w_len - idx - 2] = delta.dot(&lrs[0].zs.t());
+            nabla_w[w_len - idx - 2] = delta.dot(&lrs[0].state.t());
         }
+
+        // First layer, if there is more than 1 layer
+        if self.layers.len() >= 2{
+            let derivative = Sigmoid::derivative(&self.layers.first().unwrap().zs, None);
+            delta = &self.layers[1].weights.t().dot(&delta) * derivative;
+            nabla_b[0] = delta.clone();
+            nabla_w[0] = delta.dot(&input_set.t());
+
+        }
+
 
         (nabla_b, nabla_w)
     }
