@@ -3,13 +3,13 @@ use crate::{
     traits::{Activation, Layer},
 };
 use ndarray::Array2;
-use rand::prelude::*;
 use rand::distributions::Standard;
+use rand::prelude::*;
 
 use super::activations::Sigmoid;
 
-fn local_sig(x: f64) -> f64{
-    1. / ( 1. + (-x).exp())
+fn local_sig(x: f64) -> f64 {
+    1. / (1. + (-x).exp())
 }
 
 #[derive(Debug)]
@@ -44,8 +44,7 @@ impl FFLayer {
                 biases: Array2::zeros((neurons, 1)),
                 zs: Array2::zeros((neurons, 1)),
                 state: Array2::zeros((neurons, 1)),
-
-            }
+            },
         }
     }
 }
