@@ -18,13 +18,13 @@ pub fn prepare_file(filename: &str) -> (Vec<(Array2<f64>, Array2<f64>)>, HashMap
             )
         })
         .collect::<Vec<(&str, Vec<f64>)>>();
-    let classes: HashMap<&str, f64> = records
+    let classes: HashMap<String, f64> = records
         .iter()
         .fold(
-            (HashMap::<&str, f64>::new(), 0),
+            (HashMap::<String, f64>::new(), 0),
             |(mut working_set, mut counter), record| {
                 if !working_set.contains_key(record.0){
-                    working_set.insert(record.0, counter as f64);
+                    working_set.insert(record.0.to_owned(), counter as f64);
                     counter += 1;
                 };
                 (working_set, counter)
@@ -54,5 +54,5 @@ pub fn prepare_file(filename: &str) -> (Vec<(Array2<f64>, Array2<f64>)>, HashMap
         })
         .collect::<Vec<_>>();
 
-    (parsed, HashMap::new())
+    (parsed, classes)
 }

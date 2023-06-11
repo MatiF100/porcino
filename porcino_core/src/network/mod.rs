@@ -21,7 +21,7 @@ impl Network {
                     FFLayer::new(
                         window[0],
                         window[1],
-                        crate::enums::InitializationMethods::Zero,
+                        crate::enums::InitializationMethods::Random,
                     )
                 })
                 .collect(),
@@ -113,11 +113,15 @@ impl Network {
         let mut delta = (&self.layers.last().unwrap().state - reference_set)
             * &Sigmoid::derivative(&self.layers.last().unwrap().zs, None);
 
+        //dbg!(reference_set - &self.layers.last().unwrap().state);
+        //dbg!(&self.layers.last().unwrap().zs);
+        //dbg!(&delta);
+
         *nabla_b.last_mut().unwrap() = delta.clone();
         *nabla_w.last_mut().unwrap() = if self.layers.len() >= 2 {
             delta.dot(&self.layers[self.layers.len() - 2].state.t())
         } else {
-            delta.dot(&self.layers[0].zs.t())
+            delta.dot(&input_set.t())
         };
 
         let b_len = nabla_b.len();
