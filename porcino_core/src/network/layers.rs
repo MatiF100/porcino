@@ -29,6 +29,12 @@ impl FFLayer {
                 zs: Array2::zeros((neurons, 1)),
                 state: Array2::zeros((neurons, 1)),
             },
+            InitializationMethods::One => Self {
+                weights: Array2::ones((neurons, inputs)),
+                biases: Array2::zeros((neurons, 1)),
+                zs: Array2::zeros((neurons, 1)),
+                state: Array2::zeros((neurons, 1)),
+            },
             InitializationMethods::PseudoSpread => Self {
                 weights: Array2::from_shape_fn((neurons, inputs), |(i, j)| {
                     local_sig((i as f64 + 1.0).exp() * (j as f64 + 2.0).ln()) - 0.5

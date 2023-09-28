@@ -1,4 +1,6 @@
 [workspace]
 members = [
-    "porcino_core"
+    "porcino_core",
+    "porcino_app",
+    "porcino_data"
 ]

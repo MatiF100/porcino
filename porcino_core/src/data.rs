@@ -2,12 +2,15 @@ use std::collections::HashMap;
 
 use ndarray::{Array, Array2};
 
-pub fn prepare_file(filename: &str) -> (Vec<(Array2<f64>, Array2<f64>)>, HashMap<String, f64>) {
+pub fn prepare_file(
+    filename: &str,
+    separator: &str,
+) -> (Vec<(Array2<f64>, Array2<f64>)>, HashMap<String, f64>) {
     let contents = std::fs::read_to_string(filename).unwrap();
     let records = contents
         .trim()
         .lines()
-        .map(|line| line.trim().rsplit_once(",").unwrap())
+        .map(|line| line.trim().rsplit_once(separator).unwrap())
         .map(|(params, class)| {
             (
                 class,
@@ -33,11 +36,23 @@ pub fn prepare_file(filename: &str) -> (Vec<(Array2<f64>, Array2<f64>)>, HashMap
         .0;
 
     let maxes = (0..records[0].1.len())
-        .map(|i| records.iter().map(|inner| inner.1[i]).max_by(|a,b| a.total_cmp(b)).unwrap())
+        .map(|i| {
+            records
+                .iter()
+                .map(|inner| inner.1[i])
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap()
+        })
         //.map(|v| v.1.iter().max_by(|a, b| a.total_cmp(b)).unwrap())
         .collect::<Vec<_>>();
     let mins = (0..records[0].1.len())
-        .map(|i| records.iter().map(|inner| inner.1[i]).min_by(|a,b| a.total_cmp(b)).unwrap())
+        .map(|i| {
+            records
+                .iter()
+                .map(|inner| inner.1[i])
+                .min_by(|a, b| a.total_cmp(b))
+                .unwrap()
+        })
         .collect::<Vec<_>>();
 
     let parsed = records

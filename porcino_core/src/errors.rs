@@ -12,7 +12,6 @@ impl ErrorFn for SSE {
             .iter()
             .zip(reference_set)
             .map(|v| (v.0 - v.1))
-            // Calculating Mean Squared Error - average squared cost over all training pairs
             .map(|e| e.powf(2.0))
             .sum::<f64>()
     }

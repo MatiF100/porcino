@@ -13,17 +13,11 @@ pub struct Network {
 }
 
 impl Network {
-    pub fn new(neurons: Vec<usize>) -> Self {
+    pub fn new(neurons: Vec<usize>, init: crate::enums::InitializationMethods) -> Self {
         Self {
             layers: neurons
                 .windows(2)
-                .map(|window| {
-                    FFLayer::new(
-                        window[0],
-                        window[1],
-                        crate::enums::InitializationMethods::Random,
-                    )
-                })
+                .map(|window| FFLayer::new(window[0], window[1], init))
                 .collect(),
         }
     }
