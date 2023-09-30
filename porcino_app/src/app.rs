@@ -1,5 +1,6 @@
 use egui_file::FileDialog;
-use porcino_data::parse::FileView;
+use porcino_data::parse::{parse_data_file, ClassType, FileView};
+use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -20,30 +21,6 @@ pub struct TemplateApp {
 enum PreviewData {
     Ok(FileView),
     Err(String),
-}
-#[derive(Default)]
-struct DataSettings {
-    columns: Vec<ColumnType>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum ColumnType {
-    Parameter(ParameterType),
-    Class(ClassType),
-    Ignored,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum ParameterType {
-    Boolean,
-    Numeric,
-    NumericUnnormalized,
-    Label,
-}
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum ClassType {
-    Value,
-    Label,
 }
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 enum Panels {
@@ -284,6 +261,10 @@ impl eframe::App for TemplateApp {
                                                 });
                                             });
                                         });
+
+                                        if ui.button("PARSE!").clicked(){
+                                            let _ = parse_data_file(file, data_settings, *has_headers, separator);
+                                        }
                                     }
                                     PreviewData::Err(e) => {
                                         ui.colored_label(egui::Color32::RED, e);
