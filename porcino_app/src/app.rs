@@ -13,6 +13,7 @@ pub struct TemplateApp {
     separator: String,
     preview_lines: usize,
     file_preview: Option<PreviewData>,
+    data_settings: DataSettings,
 }
 
 #[derive(Debug)]
@@ -20,22 +21,26 @@ enum PreviewData {
     Ok(FileView),
     Err(String),
 }
+#[derive(Default)]
 struct DataSettings {
     columns: Vec<ColumnType>,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ColumnType {
     Parameter(ParameterType),
-    Class,
+    Class(ClassType),
     Ignored,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ParameterType {
     Boolean,
     Numeric,
     NumericUnnormalized,
     Label,
 }
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ClassType {
     Value,
     Label,
@@ -59,6 +64,7 @@ impl Default for TemplateApp {
             separator: String::from(";"),
             preview_lines: 5,
             file_preview: None,
+            data_settings: DataSettings::default(),
         }
     }
 }
@@ -88,6 +94,7 @@ impl eframe::App for TemplateApp {
             separator,
             preview_lines,
             file_preview,
+            data_settings,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -110,6 +117,9 @@ impl eframe::App for TemplateApp {
                         let mut dialog = FileDialog::open_file(opened_file.clone());
                         dialog.open();
                         *opened_file_dialog = Some(dialog);
+                    }
+                    if ui.button("Unload file").clicked() {
+                        *opened_file = None;
                     }
                 });
             });
@@ -185,6 +195,10 @@ impl eframe::App for TemplateApp {
 
                                 match parsed_file {
                                     Ok(f) => {
+                                        data_settings.columns = vec![
+                                            ColumnType::Ignored;
+                                            f.fields.first().unwrap().len()
+                                        ];
                                         *file_preview = Some(PreviewData::Ok(f));
                                     }
                                     Err(e) => *file_preview = Some(PreviewData::Err(e.to_string())),
@@ -210,7 +224,59 @@ impl eframe::App for TemplateApp {
                                                 labels.iter().enumerate().for_each(|(i, label)| {
                                                     ui.vertical(|ui| {
                                                         ui.set_min_width((label.len() * 7) as f32);
-                                                        ui.menu_button(label, |ui| {});
+                                                        ui.menu_button(label, |ui| {
+                                                            ui.selectable_value(
+                                                                &mut data_settings.columns[i],
+                                                                ColumnType::Ignored,
+                                                                "Ignored",
+                                                            );
+                                                            ui.menu_button("Parameter", |ui| {
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Parameter(
+                                                                        ParameterType::Boolean,
+                                                                    ),
+                                                                    "Boolean",
+                                                                );
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Parameter(
+                                                                        ParameterType::Label,
+                                                                    ),
+                                                                    "Text label",
+                                                                );
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Parameter(
+                                                                        ParameterType::Numeric,
+                                                                    ),
+                                                                    "Number",
+                                                                );
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Parameter(
+                                                                        ParameterType::NumericUnnormalized,
+                                                                    ),
+                                                                    "Number (not normalized)",
+                                                                );
+                                                            });
+                                                            ui.menu_button("Class", |ui| {
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Class(
+                                                                        ClassType::Label
+                                                                    ),
+                                                                    "Text label",
+                                                                );
+                                                                ui.selectable_value(
+                                                                    &mut data_settings.columns[i],
+                                                                    ColumnType::Class(
+                                                                        ClassType::Value
+                                                                    ),
+                                                                    "Number",
+                                                                );
+                                                            });
+                                                        });
                                                         data.fields.iter().for_each(|row| {
                                                             ui.label(row[i].clone());
                                                         })
