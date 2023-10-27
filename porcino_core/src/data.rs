@@ -15,7 +15,7 @@ pub fn prepare_file(
             (
                 class,
                 params
-                    .split(",")
+                    .split(',')
                     .map(|v| v.parse::<f64>().unwrap())
                     .collect(),
             )

@@ -1,3 +1,4 @@
+use egui::Color32;
 use egui_file::FileDialog;
 use porcino_data::parse::{parse_data_file, ClassType, FileView};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
@@ -15,6 +16,7 @@ pub struct TemplateApp {
     preview_lines: usize,
     file_preview: Option<PreviewData>,
     data_settings: DataSettings,
+    dataset: Option<Vec<Vec<f64>>>,
 }
 
 #[derive(Debug)]
@@ -33,7 +35,6 @@ enum Panels {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
             current_panel: Panels::Landing,
             opened_file_dialog: None,
             opened_file: None,
@@ -42,6 +43,7 @@ impl Default for TemplateApp {
             preview_lines: 5,
             file_preview: None,
             data_settings: DataSettings::default(),
+            dataset: None,
         }
     }
 }
@@ -72,6 +74,7 @@ impl eframe::App for TemplateApp {
             preview_lines,
             file_preview,
             data_settings,
+            dataset,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -263,7 +266,10 @@ impl eframe::App for TemplateApp {
                                         });
 
                                         if ui.button("PARSE!").clicked(){
-                                            let _ = parse_data_file(file, data_settings, *has_headers, separator);
+                                            let parsed_data = parse_data_file(file, data_settings, *has_headers, separator);
+                                            if let Ok(v) = parsed_data{
+                                                *dataset = Some(v);
+                                            }
                                         }
                                     }
                                     PreviewData::Err(e) => {
@@ -274,10 +280,21 @@ impl eframe::App for TemplateApp {
                         });
                     }
                 }
+                Panels::Network => {
+                    if let Some(dataset) = dataset{
+
+                    }else{
+                        ui.colored_label(Color32::DARK_GREEN, "No active dataset!");
+                    }
+                }
                 _ => {}
             }
 
             egui::warn_if_debug_build(ui);
+        });
+
+        egui::SidePanel::right("right_panel").show(ctx, |ui| {
+            ui.heading("Utility panel");
         });
     }
 }

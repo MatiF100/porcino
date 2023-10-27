@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -9,17 +9,18 @@ pub struct FileView {
     pub headers: Option<Vec<String>>,
     pub fields: Vec<Vec<String>>,
 }
-#[derive(Debug)]
-pub enum Output<'a> {
-    Value(Vec<f64>),
-    Class(HashMap<&'a str, f64>),
+
+pub struct Output {
+    pub data: Vec<Vec<f64>>,
+    pub meta: Metadata,
 }
+
 pub fn parse_data_file(
     path: &PathBuf,
     settings: &DataSettings,
     header: bool,
     separator: &str,
-) -> Result<()> {
+) -> Result<Output> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut buf = String::new();
@@ -81,48 +82,58 @@ pub fn parse_data_file(
         })
         .collect::<Vec<_>>();
 
-    let outputs = transpose_vec(intermediate, settings.columns.len())
+    let mut new_idx = 0;
+    let mut meta = Metadata::default();
+    let outputs = transpose_vec(intermediate.clone(), settings.columns.len())
         .into_iter()
         .enumerate()
         .filter_map(|(idx, column)| match settings.columns[idx] {
-            ColumnType::Class(class_type) => Some(match class_type {
-                ClassType::Value => column
-                    .iter()
-                    .map(|v| v.parse::<f64>().unwrap())
-                    .collect::<Vec<_>>(),
-                ClassType::Label => column
-                    .iter()
-                    .map(|v| {
-                        let hm = &labels.iter().find(|(c, _)| *c == idx).unwrap().1;
-                        *hm.get(v).unwrap()
-                    })
-                    .collect(),
-            }),
-            ColumnType::Parameter(parameter_type) => Some(match parameter_type {
-                ParameterType::Boolean | ParameterType::NumericUnnormalized => column
-                    .iter()
-                    .map(|v| v.parse::<f64>().unwrap())
-                    .collect::<Vec<_>>(),
-                ParameterType::Numeric => normalize_values(
-                    &column
+            ColumnType::Class(class_type) => {
+                meta.classes.push(new_idx);
+                new_idx += 1;
+                Some(match class_type {
+                    ClassType::Value => column
                         .iter()
                         .map(|v| v.parse::<f64>().unwrap())
                         .collect::<Vec<_>>(),
-                ),
-                ParameterType::Label => column
-                    .iter()
-                    .map(|v| {
-                        let hm = &labels.iter().find(|(c, _)| *c == idx).unwrap().1;
-                        *hm.get(v).unwrap()
-                    })
-                    .collect(),
-            }),
+                    ClassType::Label => column
+                        .iter()
+                        .map(|v| {
+                            let hm = &labels.iter().find(|(c, _)| *c == idx).unwrap().1;
+                            *hm.get(v).unwrap()
+                        })
+                        .collect(),
+                })
+            }
+            ColumnType::Parameter(parameter_type) => {
+                meta.params.push(new_idx);
+                new_idx += 1;
+                Some(match parameter_type {
+                    ParameterType::Boolean | ParameterType::NumericUnnormalized => column
+                        .iter()
+                        .map(|v| v.parse::<f64>().unwrap())
+                        .collect::<Vec<_>>(),
+                    ParameterType::Numeric => normalize_values(
+                        &column
+                            .iter()
+                            .map(|v| v.parse::<f64>().unwrap())
+                            .collect::<Vec<_>>(),
+                    ),
+                    ParameterType::Label => column
+                        .iter()
+                        .map(|v| {
+                            let hm = &labels.iter().find(|(c, _)| *c == idx).unwrap().1;
+                            *hm.get(v).unwrap()
+                        })
+                        .collect(),
+                })
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
 
-    println!("{:?}", outputs);
-    Ok(())
+    let data = transpose_vec(outputs, intermediate.len());
+    Ok(Output { data, meta })
 }
 fn transpose_vec<T>(vec: Vec<Vec<T>>, inner_len: usize) -> Vec<Vec<T>> {
     let mut iters: Vec<_> = vec.into_iter().map(|n| n.into_iter()).collect();
@@ -136,7 +147,7 @@ fn transpose_vec<T>(vec: Vec<Vec<T>>, inner_len: usize) -> Vec<Vec<T>> {
         .collect::<Vec<_>>()
 }
 
-fn normalize_values(values: &Vec<f64>) -> Vec<f64>
+fn normalize_values(values: &[f64]) -> Vec<f64>
 where
 {
     let min = values
@@ -202,4 +213,10 @@ pub enum ParameterType {
 pub enum ClassType {
     Value,
     Label,
+}
+
+#[derive(Default, Debug)]
+pub struct Metadata {
+    pub params: Vec<usize>,
+    pub classes: Vec<usize>,
 }
