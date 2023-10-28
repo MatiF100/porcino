@@ -10,7 +10,7 @@ pub struct FileView {
     pub fields: Vec<Vec<String>>,
 }
 
-pub struct Output {
+pub struct TaggedData {
     pub data: Vec<Vec<f64>>,
     pub meta: Metadata,
 }
@@ -20,7 +20,7 @@ pub fn parse_data_file(
     settings: &DataSettings,
     header: bool,
     separator: &str,
-) -> Result<Output> {
+) -> Result<TaggedData> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut buf = String::new();
@@ -133,7 +133,7 @@ pub fn parse_data_file(
         .collect::<Vec<_>>();
 
     let data = transpose_vec(outputs, intermediate.len());
-    Ok(Output { data, meta })
+    Ok(TaggedData { data, meta })
 }
 fn transpose_vec<T>(vec: Vec<Vec<T>>, inner_len: usize) -> Vec<Vec<T>> {
     let mut iters: Vec<_> = vec.into_iter().map(|n| n.into_iter()).collect();

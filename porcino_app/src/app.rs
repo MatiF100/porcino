@@ -1,6 +1,9 @@
-use egui::Color32;
+use egui::{Color32, Slider};
 use egui_file::FileDialog;
-use porcino_data::parse::{parse_data_file, ClassType, FileView};
+use log::warn;
+use porcino_core::enums::InitializationMethods;
+use porcino_core::network::Network;
+use porcino_data::parse::{parse_data_file, ClassType, FileView, TaggedData};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -16,7 +19,9 @@ pub struct TemplateApp {
     preview_lines: usize,
     file_preview: Option<PreviewData>,
     data_settings: DataSettings,
-    dataset: Option<Vec<Vec<f64>>>,
+    dataset: Option<TaggedData>,
+    network: Option<Network>,
+    netConf: NetPreConfig,
 }
 
 #[derive(Debug)]
@@ -31,6 +36,10 @@ enum Panels {
     Network,
     Visualize,
 }
+#[derive(Default)]
+struct NetPreConfig {
+    layers: Vec<usize>,
+}
 
 impl Default for TemplateApp {
     fn default() -> Self {
@@ -44,6 +53,8 @@ impl Default for TemplateApp {
             file_preview: None,
             data_settings: DataSettings::default(),
             dataset: None,
+            network: None,
+            netConf: NetPreConfig::default(),
         }
     }
 }
@@ -75,6 +86,8 @@ impl eframe::App for TemplateApp {
             file_preview,
             data_settings,
             dataset,
+            network,
+            netConf,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -120,12 +133,6 @@ impl eframe::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-            if ui.button("Load file").clicked() {
-                // Open file dialog
-                let mut dialog = FileDialog::open_file(opened_file.clone());
-                dialog.open();
-                *opened_file_dialog = Some(dialog);
-            }
 
             if let Some(dialog) = opened_file_dialog {
                 if dialog.show(ctx).selected() {
@@ -144,6 +151,12 @@ impl eframe::App for TemplateApp {
                     ));
                 }
                 Panels::Data => {
+                    if ui.button("Load file").clicked() {
+                        // Open file dialog
+                        let mut dialog = FileDialog::open_file(opened_file.clone());
+                        dialog.open();
+                        *opened_file_dialog = Some(dialog);
+                    }
                     if let Some(file) = opened_file {
                         ui.label(format!(
                             "Currently selected file: {}",
@@ -282,9 +295,25 @@ impl eframe::App for TemplateApp {
                 }
                 Panels::Network => {
                     if let Some(dataset) = dataset{
+                        if ui.button("Add layer").clicked(){
+                            netConf.layers.push(0);
+                        }
 
+                        ui.label(format!("Input neurons: {}", dataset.meta.params.len()));
+                        for layer in &mut netConf.layers{
+                            ui.add(Slider::new(layer, 0usize..=100usize).text("Neurons"));
+                        }
+                        ui.label(format!("Output neurons: {}", dataset.meta.classes.len()));
+
+                        if ui.button("Generate Network structure").clicked(){
+                            let mut total_layers = netConf.layers.clone();
+                            total_layers.insert(0, dataset.meta.params.len());
+                            total_layers.push(dataset.meta.classes.len());
+                            *network = Some(Network::new(total_layers, InitializationMethods::PseudoSpread));
+                            dbg!(&network);
+                        }
                     }else{
-                        ui.colored_label(Color32::DARK_GREEN, "No active dataset!");
+                        ui.colored_label(Color32::DARK_RED, "No active dataset! Cannot infer network options");
                     }
                 }
                 _ => {}
