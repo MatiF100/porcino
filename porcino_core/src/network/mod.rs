@@ -1,4 +1,6 @@
+use crate::network::activations::Linear;
 use ndarray::Array2;
+use porcino_data::parse::TrainingSample;
 
 use crate::traits::{Activation, Layer};
 
@@ -12,13 +14,37 @@ pub struct Network {
     pub layers: Vec<FFLayer>,
 }
 
+pub struct LayerSettings {
+    pub neurons: usize,
+    pub activation: Activations,
+}
+
+pub enum Activations {
+    Sigmoid,
+    Linear,
+}
+
 impl Network {
-    pub fn new(neurons: Vec<usize>, init: crate::enums::InitializationMethods) -> Self {
+    pub fn new(neurons: Vec<LayerSettings>, init: crate::enums::InitializationMethods) -> Self {
         Self {
-            layers: neurons
-                .windows(2)
-                .map(|window| FFLayer::new(window[0], window[1], init))
-                .collect(),
+            layers: {
+                let dupa = neurons
+                    .windows(2)
+                    .map(|window| {
+                        FFLayer::new(
+                            window[0].neurons,
+                            window[1].neurons,
+                            init,
+                            match window[1].activation {
+                                Activations::Sigmoid => &Sigmoid,
+                                Activations::Linear => &Linear,
+                            },
+                        )
+                    })
+                    .collect();
+                dbg!(&dupa);
+                dupa
+            },
         }
     }
 
@@ -29,7 +55,7 @@ impl Network {
         }
     }
 
-    pub fn gradient_descent(&mut self, training_data: Vec<(&Array2<f64>, &Array2<f64>)>, eta: f64) {
+    pub fn gradient_descent(&mut self, training_data: &Vec<TrainingSample>, eta: f64) {
         // Allocation of gradient vectors
         let mut nabla_b = self
             .layers
@@ -45,10 +71,11 @@ impl Network {
             .collect::<Vec<Array2<f64>>>();
 
         // Loop performing learning iteration over all mini_batches
-        for (x, y) in training_data {
+        for sample in training_data {
             // Getting updated gradients from backpropagation algorithm
-            self.process_data(x);
-            let (delta_nabla_b, delta_nabla_w) = self.calculate_gradient(x, y);
+            self.process_data(&sample.input);
+            let (delta_nabla_b, delta_nabla_w) =
+                self.calculate_gradient(&sample.input, &sample.expected_output);
 
             // Calculating new gradients with respect to ones created in first steps and also newly calculated ones
             nabla_b = nabla_b
@@ -101,7 +128,12 @@ impl Network {
 
         // Last layer
         let mut delta = (&self.layers.last().unwrap().state - reference_set)
-            * &Sigmoid::derivative(&self.layers.last().unwrap().zs, None);
+            * &self
+                .layers
+                .last()
+                .unwrap()
+                .activation
+                .derivative(&self.layers.last().unwrap().zs, None);
 
         *nabla_b.last_mut().unwrap() = delta.clone();
         *nabla_w.last_mut().unwrap() = if self.layers.len() >= 2 {
@@ -115,7 +147,7 @@ impl Network {
 
         // Middle layers
         for (idx, lrs) in self.layers.windows(3).rev().enumerate() {
-            let derivative = Sigmoid::derivative(&lrs[1].zs, None);
+            let derivative = lrs[1].activation.derivative(&lrs[1].zs, None);
             delta = &lrs[2].weights.t().dot(&delta) * &derivative;
 
             nabla_b[b_len - idx - 2] = delta.clone();
@@ -124,7 +156,12 @@ impl Network {
 
         // First layer, if there is more than 1 layer
         if self.layers.len() >= 2 {
-            let derivative = Sigmoid::derivative(&self.layers.first().unwrap().zs, None);
+            let derivative = self
+                .layers
+                .first()
+                .unwrap()
+                .activation
+                .derivative(&self.layers[1].zs, None);
             delta = &self.layers[1].weights.t().dot(&delta) * derivative;
             nabla_b[0] = delta.clone();
             nabla_w[0] = delta.dot(&input_set.t());

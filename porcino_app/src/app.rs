@@ -1,16 +1,17 @@
+use crate::runner::{run_threaded, NetworkResponse, NetworkSignal};
 use egui::{Color32, Slider};
 use egui_file::FileDialog;
-use log::warn;
 use porcino_core::enums::InitializationMethods;
-use porcino_core::network::Network;
-use porcino_data::parse::{parse_data_file, ClassType, FileView, TaggedData};
+use porcino_core::network::Activations::{Linear, Sigmoid};
+use porcino_core::network::{LayerSettings, Network};
+use porcino_data::parse::{get_sampled_data, parse_data_file, ClassType, FileView, TaggedData};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::sync::mpsc::channel;
 
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
 pub struct TemplateApp {
-    // Example stuff:
     current_panel: Panels,
     opened_file: Option<PathBuf>,
     opened_file_dialog: Option<FileDialog>,
@@ -20,8 +21,8 @@ pub struct TemplateApp {
     file_preview: Option<PreviewData>,
     data_settings: DataSettings,
     dataset: Option<TaggedData>,
-    network: Option<Network>,
-    netConf: NetPreConfig,
+    network: Option<(mpsc::Receiver<NetworkResponse>, mpsc::Sender<NetworkSignal>)>,
+    net_conf: NetPreConfig,
 }
 
 #[derive(Debug)]
@@ -54,7 +55,7 @@ impl Default for TemplateApp {
             data_settings: DataSettings::default(),
             dataset: None,
             network: None,
-            netConf: NetPreConfig::default(),
+            net_conf: NetPreConfig::default(),
         }
     }
 }
@@ -87,7 +88,7 @@ impl eframe::App for TemplateApp {
             data_settings,
             dataset,
             network,
-            netConf,
+            net_conf,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -128,6 +129,9 @@ impl eframe::App for TemplateApp {
             }
             if ui.button("Network configurator").clicked() {
                 *current_panel = Panels::Network;
+            }
+            if ui.button("Network visualizer").clicked() {
+                *current_panel = Panels::Visualize;
             }
         });
 
@@ -296,25 +300,51 @@ impl eframe::App for TemplateApp {
                 Panels::Network => {
                     if let Some(dataset) = dataset{
                         if ui.button("Add layer").clicked(){
-                            netConf.layers.push(0);
+                            net_conf.layers.push(0);
                         }
 
                         ui.label(format!("Input neurons: {}", dataset.meta.params.len()));
-                        for layer in &mut netConf.layers{
+                        for layer in &mut net_conf.layers{
                             ui.add(Slider::new(layer, 0usize..=100usize).text("Neurons"));
                         }
                         ui.label(format!("Output neurons: {}", dataset.meta.classes.len()));
 
                         if ui.button("Generate Network structure").clicked(){
-                            let mut total_layers = netConf.layers.clone();
-                            total_layers.insert(0, dataset.meta.params.len());
-                            total_layers.push(dataset.meta.classes.len());
-                            *network = Some(Network::new(total_layers, InitializationMethods::PseudoSpread));
-                            dbg!(&network);
+                            let mut total_layers = net_conf.layers.iter().map(|v| LayerSettings{neurons: *v, activation: Sigmoid}).collect::<Vec<_>>();
+                            total_layers.insert(0, LayerSettings{neurons: dataset.meta.params.len(), activation: Linear});
+                            total_layers.push(LayerSettings{neurons: dataset.meta.classes.len(), activation: Linear});
+                            let local_network = Network::new(total_layers, InitializationMethods::Random);
+                            let signals = channel::<NetworkSignal>();
+                            let responses = channel::<NetworkResponse>();
+
+                            let _ = run_threaded(local_network, responses.0, signals.1, 0.0001);
+                            *network = Some((responses.1, signals.0));
                         }
                     }else{
                         ui.colored_label(Color32::DARK_RED, "No active dataset! Cannot infer network options");
                     }
+                }
+                Panels::Visualize => {
+                    if let Some((rx, tx)) = network{
+                        if let Some(data) = dataset{
+                            if ui.button("Conf dataset").clicked(){
+                                let _ = tx.send(NetworkSignal::SetData(get_sampled_data(data)));
+                            }
+                            if ui.button("Conf epochs").clicked(){
+                                let _ = tx.send(NetworkSignal::SetEpochs(3000));
+                            }
+                            if ui.button("Start").clicked(){
+                                let _ = tx.send(NetworkSignal::Start);
+                            }
+                            if ui.button("Eval").clicked(){
+                                let _ = tx.send(NetworkSignal::EvalData(get_sampled_data(data)));
+                                if let Ok(NetworkResponse::EvalResult(res)) = rx.recv(){
+                                    dbg!(res);
+                                };
+                            }
+                        }
+                    }
+
                 }
                 _ => {}
             }

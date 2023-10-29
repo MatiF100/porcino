@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ndarray::Array2;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -13,6 +14,38 @@ pub struct FileView {
 pub struct TaggedData {
     pub data: Vec<Vec<f64>>,
     pub meta: Metadata,
+}
+#[derive(Clone, Debug)]
+pub struct TrainingSample {
+    pub input: Array2<f64>,
+    pub expected_output: Array2<f64>,
+}
+
+pub fn get_sampled_data(raw_data: &TaggedData) -> Vec<TrainingSample> {
+    raw_data
+        .data
+        .iter()
+        .map(|row| TrainingSample {
+            input: Array2::from_shape_vec(
+                (raw_data.meta.params.len(), 1),
+                row.iter()
+                    .enumerate()
+                    .filter(|(idx, _)| raw_data.meta.params.contains(idx))
+                    .map(|(_, v)| *v)
+                    .collect(),
+            )
+            .unwrap(),
+            expected_output: Array2::from_shape_vec(
+                (raw_data.meta.classes.len(), 1),
+                row.iter()
+                    .enumerate()
+                    .filter(|(idx, _)| raw_data.meta.classes.contains(idx))
+                    .map(|(_, v)| *v)
+                    .collect(),
+            )
+            .unwrap(),
+        })
+        .collect()
 }
 
 pub fn parse_data_file(

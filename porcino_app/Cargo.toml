@@ -16,6 +16,7 @@ log = "0.4"
 
 egui_file = "0.10.2"
 anyhow = "1.0.75"
+ndarray = "0.15.6"
 
 porcino_core = {path = "../porcino_core"}
 porcino_data = {path = "../porcino_data"}

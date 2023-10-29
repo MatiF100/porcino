@@ -6,7 +6,7 @@ fn main() {
     let t = data::prepare_file("wine.data", ",");
 
     for _ in 0..100000 {
-        x.gradient_descent(t.0.iter().map(|v| (&v.0, &v.1)).collect(), 0.0001);
+        x.gradient_descent(t.0.iter().map(|v| &(&v.0, &v.1)).collect(), 0.0001);
     }
 
     let result = evaluate(&mut x, &t.0);
