@@ -161,7 +161,7 @@ impl Network {
                 .first()
                 .unwrap()
                 .activation
-                .derivative(&self.layers[1].zs, None);
+                .derivative(&self.layers[0].zs, None);
             delta = &self.layers[1].weights.t().dot(&delta) * derivative;
             nabla_b[0] = delta.clone();
             nabla_w[0] = delta.dot(&input_set.t());
