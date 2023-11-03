@@ -1,5 +1,5 @@
 use crate::runner::{run_threaded, NetworkResponse, NetworkSignal};
-use egui::{Color32, Slider};
+use egui::{Color32, DragValue, ProgressBar, RichText, Slider};
 use egui_file::FileDialog;
 use porcino_core::enums::InitializationMethods;
 use porcino_core::network::Activations::{Linear, Sigmoid};
@@ -7,6 +7,7 @@ use porcino_core::network::{LayerSettings, Network};
 use porcino_data::parse::{get_sampled_data, parse_data_file, ClassType, FileView, TaggedData};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
+use std::fs::read;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::channel;
@@ -23,6 +24,10 @@ pub struct TemplateApp {
     dataset: Option<TaggedData>,
     network: Option<(mpsc::Receiver<NetworkResponse>, mpsc::Sender<NetworkSignal>)>,
     net_conf: NetPreConfig,
+    read_progress: bool,
+    progress: f32,
+    total_sse: f64,
+    report_interval: usize,
 }
 
 #[derive(Debug)]
@@ -56,6 +61,10 @@ impl Default for TemplateApp {
             dataset: None,
             network: None,
             net_conf: NetPreConfig::default(),
+            read_progress: false,
+            progress: 0.0,
+            total_sse: 0.0,
+            report_interval: 0,
         }
     }
 }
@@ -89,6 +98,10 @@ impl eframe::App for TemplateApp {
             dataset,
             network,
             net_conf,
+            read_progress,
+            progress,
+            total_sse,
+            report_interval,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -326,6 +339,7 @@ impl eframe::App for TemplateApp {
                 }
                 Panels::Visualize => {
                     if let Some((rx, tx)) = network{
+                        // Send signal
                         if let Some(data) = dataset{
                             if ui.button("Conf dataset").clicked(){
                                 let _ = tx.send(NetworkSignal::SetData(get_sampled_data(data)));
@@ -333,17 +347,32 @@ impl eframe::App for TemplateApp {
                             if ui.button("Conf epochs").clicked(){
                                 let _ = tx.send(NetworkSignal::SetEpochs(3000));
                             }
-                            if ui.button("Start").clicked(){
-                                let _ = tx.send(NetworkSignal::Start);
+                            ui.add(Slider::new(report_interval, 0usize..=100usize).text("Report interval (epochs)"));
+                            if ui.button("Set report interval").clicked(){
+                                let _ = tx.send(NetworkSignal::SetReportInterval(*report_interval));
                             }
-                            if ui.button("Eval").clicked(){
-                                let _ = tx.send(NetworkSignal::EvalData(get_sampled_data(data)));
-                                if let Ok(NetworkResponse::EvalResult(res)) = rx.recv(){
-                                    dbg!(res);
-                                };
+                            if ui.button("Toggle learning process").clicked(){
+                                let _ = tx.send(NetworkSignal::Toggle);
+                            }
+                            if ui.button("Toggle evaluation").clicked(){
+                                let _ = tx.send(NetworkSignal::EvalData(Some(get_sampled_data(data))));
+                            }
+                            if ui.button(RichText::new("Toggle status read").color(if *read_progress {Color32::LIGHT_GREEN} else {Color32::LIGHT_GRAY})).clicked(){
+                                *read_progress = !*read_progress;
+                            }
+                        }
+                        // Try recieve signal
+                        if let Ok(sig) = rx.try_recv(){
+                            match sig{
+                                NetworkResponse::Epochs(passed, expected) => *progress = passed as f32 / expected as f32,
+                                NetworkResponse::EvalResult(eval_results) => *total_sse = eval_results.iter().map(|v| v*v).sum(),
+                                _ => todo!()
                             }
                         }
                     }
+
+                    ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::LIGHT_BLUE} else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
+                    ui.add_enabled(false, DragValue::new(total_sse));
 
                 }
                 _ => {}

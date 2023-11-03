@@ -27,24 +27,20 @@ pub enum Activations {
 impl Network {
     pub fn new(neurons: Vec<LayerSettings>, init: crate::enums::InitializationMethods) -> Self {
         Self {
-            layers: {
-                let dupa = neurons
-                    .windows(2)
-                    .map(|window| {
-                        FFLayer::new(
-                            window[0].neurons,
-                            window[1].neurons,
-                            init,
-                            match window[1].activation {
-                                Activations::Sigmoid => &Sigmoid,
-                                Activations::Linear => &Linear,
-                            },
-                        )
-                    })
-                    .collect();
-                dbg!(&dupa);
-                dupa
-            },
+            layers: neurons
+                .windows(2)
+                .map(|window| {
+                    FFLayer::new(
+                        window[0].neurons,
+                        window[1].neurons,
+                        init,
+                        match window[1].activation {
+                            Activations::Sigmoid => &Sigmoid,
+                            Activations::Linear => &Linear,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 

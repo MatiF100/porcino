@@ -9,5 +9,5 @@ pub trait Layer {
 }
 
 pub trait ErrorFn {
-    fn cost_function(&self, data: &Array2<f64>, reference: &Array2<f64>) -> f64;
+    fn cost_function(data: &Array2<f64>, reference: &Array2<f64>) -> f64;
 }

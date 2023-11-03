@@ -1,9 +1,8 @@
 use crate::traits::ErrorFn;
 
-pub struct SSE;
-impl ErrorFn for SSE {
+pub struct Sse;
+impl ErrorFn for Sse {
     fn cost_function(
-        &self,
         network_output: &ndarray::Array2<f64>,
         reference_set: &ndarray::Array2<f64>,
     ) -> f64 {

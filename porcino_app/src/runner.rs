@@ -1,6 +1,6 @@
-use crate::runner::NetworkResponse::EvalResult;
-use ndarray::Array2;
+use porcino_core::errors::Sse;
 use porcino_core::network::Network;
+use porcino_core::traits::ErrorFn;
 use porcino_data::parse::TrainingSample;
 use std::sync::mpsc;
 use std::thread;
@@ -8,14 +8,14 @@ use std::thread::JoinHandle;
 
 pub enum NetworkResponse {
     Epochs(usize, usize),
-    EvalResult(Vec<Array2<f64>>),
+    EvalResult(Vec<f64>),
 }
 pub enum NetworkSignal {
-    Start,
-    Stop,
+    Toggle,
     SetEpochs(usize),
     SetData(Vec<TrainingSample>),
-    EvalData(Vec<TrainingSample>),
+    SetReportInterval(usize),
+    EvalData(Option<Vec<TrainingSample>>),
     GetEpochs,
     GetOutput,
 }
@@ -32,6 +32,8 @@ pub fn run_threaded(
         let mut epoch_count = 0;
         let mut epochs_to_run = 0;
         let mut training_data = Vec::new();
+        let mut eval_data = None;
+        let mut report_interval = 0;
         let eta = initial_eta;
         loop {
             // Thread communication
@@ -39,9 +41,8 @@ pub fn run_threaded(
             // Check with profiler later
             if let Ok(signal) = rx.try_recv() {
                 match signal {
-                    NetworkSignal::Start => running = true,
+                    NetworkSignal::Toggle => running = !running,
                     NetworkSignal::SetEpochs(epochs) => epochs_to_run += epochs,
-                    NetworkSignal::Stop => running = false,
                     NetworkSignal::SetData(data) => training_data = data.clone(),
                     NetworkSignal::GetEpochs => {
                         let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
@@ -50,22 +51,30 @@ pub fn run_threaded(
                         let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
                     }
                     NetworkSignal::EvalData(data) => {
+                        eval_data = data;
+                    }
+                    NetworkSignal::SetReportInterval(interval) => report_interval = interval,
+                }
+            }
+
+            // Network stuff
+            if running && epoch_count < epochs_to_run {
+                network.gradient_descent(&training_data, eta);
+                epoch_count += 1;
+                if report_interval != 0 && epoch_count % report_interval == 0 {
+                    if let Some(data) = &eval_data {
                         let eval_result = data
                             .iter()
                             .map(|record| {
                                 network.process_data(&record.input);
                                 let output = &network.layers.last().unwrap().state;
-                                output - &record.expected_output
+                                Sse::cost_function(output, &record.expected_output)
                             })
                             .collect::<Vec<_>>();
-                        let _ = tx.send(EvalResult(eval_result));
+                        let _ = tx.send(NetworkResponse::EvalResult(eval_result));
                     }
+                    let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
                 }
-            }
-            // Network stuff
-            if running && epoch_count < epochs_to_run {
-                network.gradient_descent(&training_data, eta);
-                epoch_count += 1;
             }
         }
     })
