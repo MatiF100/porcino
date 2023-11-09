@@ -34,12 +34,19 @@ pub fn run_threaded(
         let mut training_data = Vec::new();
         let mut eval_data = None;
         let mut report_interval = 0;
+        let mut resume_message: Option<NetworkSignal> = None;
         let eta = initial_eta;
         loop {
             // Thread communication
             // This may significantly impact performance
             // Check with profiler later
-            if let Ok(signal) = rx.try_recv() {
+            let signal = if let Some(sig) = resume_message {
+                resume_message = None;
+                Ok(sig)
+            } else {
+                rx.try_recv()
+            };
+            if let Ok(signal) = signal {
                 match signal {
                     NetworkSignal::Toggle => running = !running,
                     NetworkSignal::SetEpochs(epochs) => epochs_to_run += epochs,
@@ -75,6 +82,10 @@ pub fn run_threaded(
                     }
                     let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
                 }
+            } else {
+                // Send thread to sleep
+                let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
+                resume_message = rx.recv().ok();
             }
         }
     })

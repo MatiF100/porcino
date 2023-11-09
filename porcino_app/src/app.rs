@@ -392,7 +392,7 @@ impl eframe::App for PorcinoApp {
                         }
                     }
 
-                    ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::LIGHT_BLUE} else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
+                    ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
                     ui.add_enabled(false, DragValue::new(total_sse));
 
                 }
