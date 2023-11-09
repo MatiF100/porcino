@@ -7,15 +7,16 @@ use porcino_core::network::{LayerSettings, Network};
 use porcino_data::parse::{get_sampled_data, parse_data_file, ClassType, FileView, TaggedData};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
-use std::fs::read;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::channel;
 
-pub struct TemplateApp {
+pub struct PorcinoApp {
     current_panel: Panels,
     opened_file: Option<PathBuf>,
     opened_file_dialog: Option<FileDialog>,
+    save_data_dialog: Option<FileDialog>,
+    load_data_dialog: Option<FileDialog>,
     has_headers: bool,
     separator: String,
     preview_lines: usize,
@@ -47,11 +48,13 @@ struct NetPreConfig {
     layers: Vec<usize>,
 }
 
-impl Default for TemplateApp {
+impl Default for PorcinoApp {
     fn default() -> Self {
         Self {
             current_panel: Panels::Landing,
             opened_file_dialog: None,
+            save_data_dialog: None,
+            load_data_dialog: None,
             opened_file: None,
             has_headers: false,
             separator: String::from(";"),
@@ -69,7 +72,7 @@ impl Default for TemplateApp {
     }
 }
 
-impl TemplateApp {
+impl PorcinoApp {
     /// Called once before the first frame.
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
@@ -82,7 +85,7 @@ impl TemplateApp {
     }
 }
 
-impl eframe::App for TemplateApp {
+impl eframe::App for PorcinoApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -102,6 +105,8 @@ impl eframe::App for TemplateApp {
             progress,
             total_sse,
             report_interval,
+            save_data_dialog,
+            load_data_dialog,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -158,6 +163,23 @@ impl eframe::App for TemplateApp {
                     }
                 }
             }
+            if let Some(dialog) = save_data_dialog{
+                if dialog.show(ctx).selected() {
+                    if let Some(data) = dataset {
+                        if let Some(file) = dialog.path() {
+                            porcino_data::persistence::save(data, &file.to_path_buf()).unwrap();
+                        }
+                    }
+                }
+            }
+            if let Some(dialog) = load_data_dialog{
+                if dialog.show(ctx).selected() {
+                    if let Some(file) = dialog.path() {
+                        *dataset = Some(porcino_data::persistence::read( &file.to_path_buf()).unwrap());
+                    }
+                }
+            }
+
             match current_panel {
                 Panels::Landing => {
                     ui.heading("eframe template");
@@ -366,7 +388,6 @@ impl eframe::App for TemplateApp {
                             match sig{
                                 NetworkResponse::Epochs(passed, expected) => *progress = passed as f32 / expected as f32,
                                 NetworkResponse::EvalResult(eval_results) => *total_sse = eval_results.iter().map(|v| v*v).sum(),
-                                _ => todo!()
                             }
                         }
                     }
@@ -375,14 +396,25 @@ impl eframe::App for TemplateApp {
                     ui.add_enabled(false, DragValue::new(total_sse));
 
                 }
-                _ => {}
             }
 
             egui::warn_if_debug_build(ui);
         });
 
         egui::SidePanel::right("right_panel").show(ctx, |ui| {
-            ui.heading("Utility panel");
+            ui.heading("Dataset");
+            if ui.button("Save").clicked() {
+                // Open file dialog
+                let mut dialog = FileDialog::save_file(Some(PathBuf::new()));
+                dialog.open();
+                *save_data_dialog = Some(dialog);
+            }
+            if ui.button("Load").clicked() {
+                // Open file dialog
+                let mut dialog = FileDialog::open_file(Some(PathBuf::new()));
+                dialog.open();
+                *load_data_dialog = Some(dialog);
+            }
         });
     }
 }

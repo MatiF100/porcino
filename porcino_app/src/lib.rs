@@ -2,4 +2,4 @@
 
 mod app;
 mod runner;
-pub use app::TemplateApp;
+pub use app::PorcinoApp;

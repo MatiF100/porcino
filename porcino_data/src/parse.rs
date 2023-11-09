@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ndarray::Array2;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
@@ -11,6 +12,7 @@ pub struct FileView {
     pub fields: Vec<Vec<String>>,
 }
 
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct TaggedData {
     pub data: Vec<Vec<f64>>,
     pub meta: Metadata,
@@ -248,7 +250,7 @@ pub enum ClassType {
     Label,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     pub params: Vec<usize>,
     pub classes: Vec<usize>,

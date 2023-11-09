@@ -2,7 +2,7 @@ use crate::network::activations::Linear;
 use ndarray::Array2;
 use porcino_data::parse::TrainingSample;
 
-use crate::traits::{Activation, Layer};
+use crate::traits::Layer;
 
 use self::{activations::Sigmoid, layers::FFLayer};
 
