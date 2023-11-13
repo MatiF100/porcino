@@ -1,8 +1,9 @@
+use crate::app::NetworkInfo;
 use porcino_core::errors::Sse;
 use porcino_core::network::Network;
 use porcino_core::traits::ErrorFn;
 use porcino_data::parse::TrainingSample;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -11,10 +12,7 @@ pub struct NetworkHandles {
     pub rx_handle: mpsc::Receiver<NetworkResponse>,
     pub tx_handle: mpsc::Sender<NetworkSignal>,
 }
-pub enum NetworkResponse {
-    Epochs(usize, usize),
-    EvalResult(Vec<f64>),
-}
+pub enum NetworkResponse {}
 pub enum NetworkSignal {
     Toggle,
     Kill,
@@ -22,13 +20,12 @@ pub enum NetworkSignal {
     SetData(Vec<TrainingSample>),
     SetReportInterval(usize),
     EvalData(Option<Vec<TrainingSample>>),
-    GetEpochs,
-    GetOutput,
 }
 pub fn run_threaded(
     mut network: Network,
     tx: mpsc::Sender<NetworkResponse>,
     rx: mpsc::Receiver<NetworkSignal>,
+    status: Arc<RwLock<NetworkInfo>>,
     initial_eta: f64,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
@@ -41,6 +38,7 @@ pub fn run_threaded(
         let mut eval_data = None;
         let mut report_interval = 0;
         let mut resume_message: Option<NetworkSignal> = None;
+        let mut eval_result: f64 = 0.0;
         let eta = initial_eta;
         loop {
             // Thread communication
@@ -57,43 +55,52 @@ pub fn run_threaded(
                     NetworkSignal::Toggle => running = !running,
                     NetworkSignal::SetEpochs(epochs) => epochs_to_run += epochs,
                     NetworkSignal::SetData(data) => training_data = data.clone(),
-                    NetworkSignal::GetEpochs => {
-                        let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
-                    }
-                    NetworkSignal::GetOutput => {
-                        let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
-                    }
                     NetworkSignal::EvalData(data) => {
                         eval_data = data;
                     }
                     NetworkSignal::SetReportInterval(interval) => report_interval = interval,
                     NetworkSignal::Kill => break,
                 }
-            }
-
-            // Network stuff
-            if running && epoch_count < epochs_to_run {
-                network.gradient_descent(&training_data, eta);
-                epoch_count += 1;
+            } else {
                 if report_interval != 0 && epoch_count % report_interval == 0 {
                     if let Some(data) = &eval_data {
-                        let eval_result = data
+                        eval_result = data
                             .iter()
                             .map(|record| {
                                 network.process_data(&record.input);
                                 let output = &network.layers.last().unwrap().state;
                                 Sse::cost_function(output, &record.expected_output)
                             })
-                            .collect::<Vec<_>>();
-                        let _ = tx.send(NetworkResponse::EvalResult(eval_result));
+                            .map(|v| v * v)
+                            .sum();
                     }
-                    let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
+
+                    report_status(status.clone(), epoch_count, epochs_to_run, eval_result);
                 }
-            } else {
-                // Send thread to sleep
-                let _ = tx.send(NetworkResponse::Epochs(epoch_count, epochs_to_run));
-                resume_message = rx.recv().ok();
+
+                // Network stuff
+                if running && epoch_count < epochs_to_run {
+                    network.gradient_descent(&training_data, eta);
+                    epoch_count += 1;
+                } else {
+                    // Send thread to sleep
+                    report_status(status.clone(), epoch_count, epochs_to_run, eval_result);
+                    resume_message = rx.recv().ok();
+                }
             }
         }
     })
+}
+
+fn report_status(
+    lock: Arc<RwLock<NetworkInfo>>,
+    epochs: usize,
+    epochs_to_run: usize,
+    last_eval_result: f64,
+) {
+    if let Ok(mut guard) = lock.write() {
+        guard.epochs = epochs;
+        guard.epochs_to_run = epochs_to_run;
+        guard.last_eval_result = last_eval_result;
+    }
 }

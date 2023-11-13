@@ -1,5 +1,5 @@
 use crate::runner::{run_threaded, NetworkHandles, NetworkResponse, NetworkSignal};
-use egui::{Color32, DragValue, ProgressBar, RichText, Slider};
+use egui::{Color32, DragValue, ProgressBar, Slider};
 use egui_file::FileDialog;
 use porcino_core::enums::InitializationMethods;
 use porcino_core::network::Activations::{Linear, Sigmoid};
@@ -12,7 +12,11 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Default)]
-struct NetworkInfo {}
+pub struct NetworkInfo {
+    pub epochs: usize,
+    pub epochs_to_run: usize,
+    pub last_eval_result: f64,
+}
 pub struct PorcinoApp {
     current_panel: Panels,
     opened_file: Option<PathBuf>,
@@ -360,7 +364,7 @@ impl eframe::App for PorcinoApp {
                             let signals = channel::<NetworkSignal>();
                             let responses = channel::<NetworkResponse>();
 
-                            let handle = run_threaded(local_network, responses.0, signals.1, 0.0001);
+                            let handle = run_threaded(local_network, responses.0, signals.1, network_info.clone(), 0.0001);
                             active_networks.push(
                                 NetworkHandles{
                                     thread_handler: handle,
@@ -392,19 +396,15 @@ impl eframe::App for PorcinoApp {
                             if ui.button("Toggle evaluation").clicked(){
                                 let _ = handles.tx_handle.send(NetworkSignal::EvalData(Some(get_sampled_data(data))));
                             }
-                            if ui.button(RichText::new("Toggle status read").color(if *read_progress {Color32::LIGHT_GREEN} else {Color32::LIGHT_GRAY})).clicked(){
-                                *read_progress = !*read_progress;
-                            }
+
                         }
                         // Try recieve signal
-                        if let Ok(sig) = handles.rx_handle.try_recv(){
-                            match sig{
-                                NetworkResponse::Epochs(passed, expected) => *progress = passed as f32 / expected as f32,
-                                NetworkResponse::EvalResult(eval_results) => *total_sse = eval_results.iter().map(|v| v*v).sum(),
-                            }
-                        }
                     }
 
+                    if let Ok(info) = network_info.try_read(){
+                        *progress = info.epochs as f32 / info.epochs_to_run as f32;
+                        *total_sse = info.last_eval_result;
+                    }
                     ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
                     ui.add_enabled(false, DragValue::new(total_sse));
                 }
@@ -448,7 +448,17 @@ impl eframe::App for PorcinoApp {
                     ui.horizontal(|ui| {
                         ui.label(label);
                         if ui.button("Select").clicked() {
+                            if let Some(net) = active_networks.get(*selected_network) {
+                                let _ = net.tx_handle.send(NetworkSignal::SetReportInterval(0));
+                            }
+
                             *selected_network = idx;
+
+                            if let Some(net) = active_networks.get(idx) {
+                                let _ = net
+                                    .tx_handle
+                                    .send(NetworkSignal::SetReportInterval(*report_interval));
+                            }
                         }
                         if ui.button("Delete").clicked() {
                             del_net = Some(idx);
