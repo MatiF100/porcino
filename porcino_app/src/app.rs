@@ -8,9 +8,11 @@ use porcino_data::parse::{get_sampled_data, parse_data_file, ClassType, FileView
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::sync::mpsc::channel;
+use std::sync::{Arc, RwLock};
 
+#[derive(Debug, Default)]
+struct NetworkInfo {}
 pub struct PorcinoApp {
     current_panel: Panels,
     opened_file: Option<PathBuf>,
@@ -24,6 +26,8 @@ pub struct PorcinoApp {
     data_settings: DataSettings,
     dataset: Option<TaggedData>,
     active_networks: Vec<NetworkHandles>,
+    network_info: Arc<RwLock<NetworkInfo>>,
+    selected_network: usize,
     net_conf: NetPreConfig,
     read_progress: bool,
     progress: f32,
@@ -63,6 +67,8 @@ impl Default for PorcinoApp {
             data_settings: DataSettings::default(),
             dataset: None,
             active_networks: vec![],
+            selected_network: 0,
+            network_info: Arc::new(RwLock::new(NetworkInfo::default())),
             net_conf: NetPreConfig::default(),
             read_progress: false,
             progress: 0.0,
@@ -100,6 +106,8 @@ impl eframe::App for PorcinoApp {
             data_settings,
             dataset,
             active_networks,
+            selected_network,
+            network_info,
             net_conf,
             read_progress,
             progress,
@@ -361,11 +369,11 @@ impl eframe::App for PorcinoApp {
                                 });
                         }
                     }else{
-                        ui.colored_label(Color32::DARK_RED, "No active dataset! Cannot infer network options");
+                    ui.colored_label(Color32::DARK_RED, "No active dataset! Cannot infer network options");
                     }
                 }
                 Panels::Visualize => {
-                    if let Some(handles) = active_networks.first(){
+                    if let Some(handles) = active_networks.get(*selected_network){
                         // Send signal
                         if let Some(data) = dataset{
                             if ui.button("Conf dataset").clicked(){
@@ -399,7 +407,6 @@ impl eframe::App for PorcinoApp {
 
                     ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
                     ui.add_enabled(false, DragValue::new(total_sse));
-
                 }
             }
 
@@ -426,6 +433,35 @@ impl eframe::App for PorcinoApp {
                 ui.label("Dataset active!");
             }
             ui.separator();
+            // Active networks module
+            ui.heading("Running networks");
+            let mut del_net = None;
+            active_networks
+                .iter()
+                .enumerate()
+                .for_each(|(idx, network)| {
+                    let label = if let Some(label) = network.thread_handler.thread().name() {
+                        label.to_owned()
+                    } else {
+                        format!("Network {}:", idx + 1)
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        if ui.button("Select").clicked() {
+                            *selected_network = idx;
+                        }
+                        if ui.button("Delete").clicked() {
+                            del_net = Some(idx);
+                        }
+                    });
+                });
+
+            if let Some(idx) = del_net {
+                if let Some(net) = active_networks.get(idx) {
+                    let _ = net.tx_handle.send(NetworkSignal::Kill);
+                }
+                active_networks.remove(idx);
+            }
         });
     }
 }

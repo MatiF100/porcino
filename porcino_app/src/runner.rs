@@ -17,6 +17,7 @@ pub enum NetworkResponse {
 }
 pub enum NetworkSignal {
     Toggle,
+    Kill,
     SetEpochs(usize),
     SetData(Vec<TrainingSample>),
     SetReportInterval(usize),
@@ -66,6 +67,7 @@ pub fn run_threaded(
                         eval_data = data;
                     }
                     NetworkSignal::SetReportInterval(interval) => report_interval = interval,
+                    NetworkSignal::Kill => break,
                 }
             }
 
