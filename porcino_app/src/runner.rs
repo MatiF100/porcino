@@ -75,7 +75,13 @@ pub fn run_threaded(
                             .sum();
                     }
 
-                    report_status(status.clone(), epoch_count, epochs_to_run, eval_result);
+                    report_status(
+                        status.clone(),
+                        epoch_count,
+                        epochs_to_run,
+                        eval_result,
+                        running,
+                    );
                 }
 
                 // Network stuff
@@ -84,7 +90,13 @@ pub fn run_threaded(
                     epoch_count += 1;
                 } else {
                     // Send thread to sleep
-                    report_status(status.clone(), epoch_count, epochs_to_run, eval_result);
+                    report_status(
+                        status.clone(),
+                        epoch_count,
+                        epochs_to_run,
+                        eval_result,
+                        false,
+                    );
                     resume_message = rx.recv().ok();
                 }
             }
@@ -97,10 +109,12 @@ fn report_status(
     epochs: usize,
     epochs_to_run: usize,
     last_eval_result: f64,
+    running: bool,
 ) {
     if let Ok(mut guard) = lock.write() {
         guard.epochs = epochs;
         guard.epochs_to_run = epochs_to_run;
         guard.last_eval_result = last_eval_result;
+        guard.running = running;
     }
 }

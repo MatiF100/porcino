@@ -16,6 +16,7 @@ pub struct NetworkInfo {
     pub epochs: usize,
     pub epochs_to_run: usize,
     pub last_eval_result: f64,
+    pub running: bool,
 }
 pub struct PorcinoApp {
     current_panel: Panels,
@@ -404,6 +405,7 @@ impl eframe::App for PorcinoApp {
                     if let Ok(info) = network_info.try_read(){
                         *progress = info.epochs as f32 / info.epochs_to_run as f32;
                         *total_sse = info.last_eval_result;
+                        *read_progress = info.running;
                     }
                     ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
                     ui.add_enabled(false, DragValue::new(total_sse));
