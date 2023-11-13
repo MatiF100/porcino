@@ -1,4 +1,4 @@
-use crate::runner::{run_threaded, NetworkResponse, NetworkSignal};
+use crate::runner::{run_threaded, NetworkHandles, NetworkResponse, NetworkSignal};
 use egui::{Color32, DragValue, ProgressBar, RichText, Slider};
 use egui_file::FileDialog;
 use porcino_core::enums::InitializationMethods;
@@ -23,7 +23,7 @@ pub struct PorcinoApp {
     file_preview: Option<PreviewData>,
     data_settings: DataSettings,
     dataset: Option<TaggedData>,
-    network: Option<(mpsc::Receiver<NetworkResponse>, mpsc::Sender<NetworkSignal>)>,
+    active_networks: Vec<NetworkHandles>,
     net_conf: NetPreConfig,
     read_progress: bool,
     progress: f32,
@@ -62,7 +62,7 @@ impl Default for PorcinoApp {
             file_preview: None,
             data_settings: DataSettings::default(),
             dataset: None,
-            network: None,
+            active_networks: vec![],
             net_conf: NetPreConfig::default(),
             read_progress: false,
             progress: 0.0,
@@ -99,7 +99,7 @@ impl eframe::App for PorcinoApp {
             file_preview,
             data_settings,
             dataset,
-            network,
+            active_networks,
             net_conf,
             read_progress,
             progress,
@@ -352,39 +352,44 @@ impl eframe::App for PorcinoApp {
                             let signals = channel::<NetworkSignal>();
                             let responses = channel::<NetworkResponse>();
 
-                            let _ = run_threaded(local_network, responses.0, signals.1, 0.0001);
-                            *network = Some((responses.1, signals.0));
+                            let handle = run_threaded(local_network, responses.0, signals.1, 0.0001);
+                            active_networks.push(
+                                NetworkHandles{
+                                    thread_handler: handle,
+                                    tx_handle: signals.0,
+                                    rx_handle: responses.1
+                                });
                         }
                     }else{
                         ui.colored_label(Color32::DARK_RED, "No active dataset! Cannot infer network options");
                     }
                 }
                 Panels::Visualize => {
-                    if let Some((rx, tx)) = network{
+                    if let Some(handles) = active_networks.first(){
                         // Send signal
                         if let Some(data) = dataset{
                             if ui.button("Conf dataset").clicked(){
-                                let _ = tx.send(NetworkSignal::SetData(get_sampled_data(data)));
+                                let _ = handles.tx_handle.send(NetworkSignal::SetData(get_sampled_data(data)));
                             }
                             if ui.button("Conf epochs").clicked(){
-                                let _ = tx.send(NetworkSignal::SetEpochs(3000));
+                                let _ = handles.tx_handle.send(NetworkSignal::SetEpochs(3000));
                             }
                             ui.add(Slider::new(report_interval, 0usize..=100usize).text("Report interval (epochs)"));
                             if ui.button("Set report interval").clicked(){
-                                let _ = tx.send(NetworkSignal::SetReportInterval(*report_interval));
+                                let _ = handles.tx_handle.send(NetworkSignal::SetReportInterval(*report_interval));
                             }
                             if ui.button("Toggle learning process").clicked(){
-                                let _ = tx.send(NetworkSignal::Toggle);
+                                let _ = handles.tx_handle.send(NetworkSignal::Toggle);
                             }
                             if ui.button("Toggle evaluation").clicked(){
-                                let _ = tx.send(NetworkSignal::EvalData(Some(get_sampled_data(data))));
+                                let _ = handles.tx_handle.send(NetworkSignal::EvalData(Some(get_sampled_data(data))));
                             }
                             if ui.button(RichText::new("Toggle status read").color(if *read_progress {Color32::LIGHT_GREEN} else {Color32::LIGHT_GRAY})).clicked(){
                                 *read_progress = !*read_progress;
                             }
                         }
                         // Try recieve signal
-                        if let Ok(sig) = rx.try_recv(){
+                        if let Ok(sig) = handles.rx_handle.try_recv(){
                             match sig{
                                 NetworkResponse::Epochs(passed, expected) => *progress = passed as f32 / expected as f32,
                                 NetworkResponse::EvalResult(eval_results) => *total_sse = eval_results.iter().map(|v| v*v).sum(),
@@ -403,18 +408,24 @@ impl eframe::App for PorcinoApp {
 
         egui::SidePanel::right("right_panel").show(ctx, |ui| {
             ui.heading("Dataset");
-            if ui.button("Save").clicked() {
-                // Open file dialog
-                let mut dialog = FileDialog::save_file(Some(PathBuf::new()));
-                dialog.open();
-                *save_data_dialog = Some(dialog);
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    // Open file dialog
+                    let mut dialog = FileDialog::save_file(Some(PathBuf::new()));
+                    dialog.open();
+                    *save_data_dialog = Some(dialog);
+                }
+                if ui.button("Load").clicked() {
+                    // Open file dialog
+                    let mut dialog = FileDialog::open_file(Some(PathBuf::new()));
+                    dialog.open();
+                    *load_data_dialog = Some(dialog);
+                }
+            });
+            if dataset.is_some() {
+                ui.label("Dataset active!");
             }
-            if ui.button("Load").clicked() {
-                // Open file dialog
-                let mut dialog = FileDialog::open_file(Some(PathBuf::new()));
-                dialog.open();
-                *load_data_dialog = Some(dialog);
-            }
+            ui.separator();
         });
     }
 }

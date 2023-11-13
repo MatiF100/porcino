@@ -6,6 +6,11 @@ use std::sync::mpsc;
 use std::thread;
 use std::thread::JoinHandle;
 
+pub struct NetworkHandles {
+    pub thread_handler: JoinHandle<()>,
+    pub rx_handle: mpsc::Receiver<NetworkResponse>,
+    pub tx_handle: mpsc::Sender<NetworkSignal>,
+}
 pub enum NetworkResponse {
     Epochs(usize, usize),
     EvalResult(Vec<f64>),
