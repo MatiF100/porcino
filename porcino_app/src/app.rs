@@ -7,6 +7,7 @@ use porcino_core::network::{LayerSettings, Network};
 use porcino_data::parse::{get_sampled_data, parse_data_file, ClassType, FileView, TaggedData};
 use porcino_data::parse::{ColumnType, DataSettings, ParameterType};
 use serde::{Deserialize, Serialize};
+use std::default::Default;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
@@ -52,9 +53,27 @@ enum Panels {
     Network,
     Visualize,
 }
-#[derive(Default)]
 struct NetPreConfig {
     layers: Vec<usize>,
+    eta: f64,
+    lr_inc: f64,
+    lr_dec: f64,
+    mc: f64,
+    max_err_coeff: f64,
+    batch_count: u64,
+}
+impl Default for NetPreConfig {
+    fn default() -> Self {
+        Self {
+            layers: Vec::default(),
+            eta: 0.05,
+            lr_inc: 1.0,
+            lr_dec: 1.0,
+            mc: 0.0,
+            max_err_coeff: 1.04,
+            batch_count: 1,
+        }
+    }
 }
 
 impl Default for PorcinoApp {
@@ -347,13 +366,29 @@ impl eframe::App for PorcinoApp {
                 }
                 Panels::Network => {
                     if let Some(dataset) = dataset{
+
+                        ui.horizontal(|ui| {
+                            ui.label("Network parameters");
+                            ui.add(egui::DragValue::new(&mut net_conf.eta));
+                        });
+                        ui.separator();
+
+                        ui.label(format!("Input neurons: {}", dataset.meta.params.len()));
                         if ui.button("Add layer").clicked(){
                             net_conf.layers.push(0);
                         }
 
-                        ui.label(format!("Input neurons: {}", dataset.meta.params.len()));
-                        for layer in &mut net_conf.layers{
-                            ui.add(Slider::new(layer, 0usize..=100usize).text("Neurons"));
+                        let mut rm_layer = None;
+                        for (idx, layer) in net_conf.layers.iter_mut().enumerate(){
+                            ui.horizontal(|ui| {
+                                ui.add(Slider::new(layer, 1usize..=100usize).text("Neurons"));
+                                if ui.button("Remove").clicked(){
+                                    rm_layer = Some(idx);
+                                }
+                            });
+                        }
+                        if let Some(idx) = rm_layer{
+                            net_conf.layers.remove(idx);
                         }
                         ui.label(format!("Output neurons: {}", dataset.meta.classes.len()));
 
@@ -365,7 +400,7 @@ impl eframe::App for PorcinoApp {
                             let signals = channel::<NetworkSignal>();
                             let responses = channel::<NetworkResponse>();
 
-                            let handle = run_threaded(local_network, responses.0, signals.1, network_info.clone(), 0.0001);
+                            let handle = run_threaded(local_network, responses.0, signals.1, network_info.clone(), net_conf.eta);
                             active_networks.push(
                                 NetworkHandles{
                                     thread_handler: handle,
@@ -400,15 +435,15 @@ impl eframe::App for PorcinoApp {
 
                         }
                         // Try recieve signal
-                    }
 
-                    if let Ok(info) = network_info.try_read(){
-                        *progress = info.epochs as f32 / info.epochs_to_run as f32;
-                        *total_sse = info.last_eval_result;
-                        *read_progress = info.running;
+                        if let Ok(info) = network_info.try_read(){
+                            *progress = info.epochs as f32 / info.epochs_to_run as f32;
+                            *total_sse = info.last_eval_result;
+                            *read_progress = info.running;
+                        }
+                        ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
+                        ui.add_enabled(false, DragValue::new(total_sse));
                     }
-                    ui.add(ProgressBar::new(*progress).show_percentage().fill(if *read_progress{Color32::BLUE } else{Color32::LIGHT_RED}).desired_width(100.0).animate(*read_progress));
-                    ui.add_enabled(false, DragValue::new(total_sse));
                 }
             }
 
