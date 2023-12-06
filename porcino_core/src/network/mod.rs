@@ -1,8 +1,9 @@
+use crate::errors::Sse;
 use crate::network::activations::Linear;
 use ndarray::Array2;
 use porcino_data::parse::TrainingSample;
 
-use crate::traits::Layer;
+use crate::traits::{ErrorFn, Layer};
 
 use self::{activations::Sigmoid, layers::FFLayer};
 
@@ -12,6 +13,7 @@ mod layers;
 #[derive(Debug)]
 pub struct Network {
     pub layers: Vec<FFLayer>,
+    pub adaptive: bool,
 }
 
 pub struct LayerSettings {
@@ -41,6 +43,7 @@ impl Network {
                     )
                 })
                 .collect(),
+            adaptive: false,
         }
     }
 
@@ -50,8 +53,19 @@ impl Network {
             input = self.layers[i].feed_forward(&input).clone();
         }
     }
+    pub fn get_total_sse(&mut self, target: &[TrainingSample]) -> f64 {
+        target
+            .iter()
+            .map(|record| {
+                self.process_data(&record.input);
+                let output = &self.layers.last().unwrap().state;
+                Sse::cost_function(output, &record.expected_output)
+            })
+            .map(|v| v * v)
+            .sum()
+    }
 
-    pub fn gradient_descent(&mut self, training_data: &Vec<TrainingSample>, eta: f64) {
+    pub fn gradient_descent(&mut self, training_data: &[TrainingSample], eta: f64) {
         // Allocation of gradient vectors
         let mut nabla_b = self
             .layers

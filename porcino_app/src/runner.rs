@@ -1,7 +1,5 @@
 use crate::app::NetworkInfo;
-use porcino_core::errors::Sse;
 use porcino_core::network::Network;
-use porcino_core::traits::ErrorFn;
 use porcino_data::parse::TrainingSample;
 use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
@@ -39,6 +37,7 @@ pub fn run_threaded(
         let mut report_interval = 0;
         let mut resume_message: Option<NetworkSignal> = None;
         let mut eval_result: f64 = 0.0;
+        let mut adaptive: bool = false;
         let eta = initial_eta;
         loop {
             // Thread communication
@@ -64,15 +63,7 @@ pub fn run_threaded(
             } else {
                 if report_interval != 0 && epoch_count % report_interval == 0 {
                     if let Some(data) = &eval_data {
-                        eval_result = data
-                            .iter()
-                            .map(|record| {
-                                network.process_data(&record.input);
-                                let output = &network.layers.last().unwrap().state;
-                                Sse::cost_function(output, &record.expected_output)
-                            })
-                            .map(|v| v * v)
-                            .sum();
+                        eval_result = network.get_total_sse(data);
                     }
 
                     report_status(
